@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>SafeBet Radar</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0a0a0a;
+    color: #f0f0f0;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 13px;
+    padding: 14px;
+  }
+  h1 { font-size: 15px; font-weight: 800; margin-bottom: 4px; }
+  .sub { font-size: 10.5px; color: #666; margin-bottom: 14px; }
+
+  .card { background: #111; border: 1px solid #232323; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+
+  select, button {
+    font-family: inherit; font-size: 12px; border-radius: 6px; border: 1px solid #2a2a2a;
+    background: #1a1a1a; color: #f0f0f0; padding: 7px 10px; cursor: pointer;
+  }
+  button.primary { background: linear-gradient(135deg,#f5a623,#e8900a); color: #000; font-weight: 700; border: none; }
+  button.danger { background: #3a1414; color: #ff6b6b; border: 1px solid #5c1a1a; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #444; display: inline-block; margin-right: 6px; }
+  .status-dot.activo { background: #4cdb85; box-shadow: 0 0 6px #4cdb85; }
+
+  #lista { max-height: 320px; overflow-y: auto; }
+  .item {
+    padding: 8px; border-radius: 7px; margin-bottom: 6px; border: 1px solid #1e1e1e;
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    cursor: pointer; font-size: 11.5px;
+  }
+  .item.en_pantalla { background: #0d2115; border-color: #1a4a2a; }
+  .item.fuera_de_pantalla { background: #1a1a1a; opacity: 0.6; }
+  .item.seleccionado { outline: 2px solid #f5a623; }
+  .item-info b { color: #fff; }
+  .item-casa { color: #7baee8; font-weight: 700; }
+  .item-cuota { font-weight: 800; color: #4cdb85; font-size: 13px; }
+  .item-right { display: flex; align-items: center; gap: 8px; }
+  .btn-verificar {
+    font-size: 9.5px; font-weight: 700; padding: 4px 8px; border-radius: 5px;
+    border: 1px solid #2a3a55; background: transparent; color: #7baee8; cursor: pointer;
+  }
+  .btn-verificar:hover { background: #142238; }
+  .btn-verificar:disabled { opacity: 0.5; cursor: wait; }
+
+  #calc-panel { display: none; }
+  #calc-panel.visible { display: block; }
+  input {
+    width: 100%; padding: 8px; border-radius: 6px; border: 2px solid #2d2d2d;
+    background: #1a1a1a; color: #f0f0f0; font-size: 13px; margin-top: 4px;
+  }
+  label { font-size: 10px; color: #888; text-transform: uppercase; font-weight: 700; }
+  .resultado { background: #0d2a1a; border: 1px solid #1a5c30; border-radius: 8px; padding: 10px; margin-top: 10px; }
+  .resultado .big { font-size: 18px; font-weight: 800; color: #fff; }
+  .resultado .g { color: #4cdb85; }
+</style>
+</head>
+<body>
+
+  <h1>📡 SafeBet Radar</h1>
+  <div class="sub">by Juan Elejalde</div>
+  <div class="sub">Lee tu cantacuotas y prepara los datos para SafeBet</div>
+
+  <div class="card">
+    <div class="row" style="justify-content: space-between;">
+      <div class="row"><span id="statusDot" class="status-dot"></span><span id="statusText">Sin calibrar</span></div>
+      <div class="row">
+        <select id="selectMonitor"></select>
+        <button id="btnCalibrar">Calibrar región</button>
+      </div>
+    </div>
+    <div class="row" style="margin-top: 10px;">
+      <button id="btnIniciar" class="primary" disabled>Iniciar radar</button>
+      <button id="btnDetener" class="danger" disabled>Detener</button>
+      <button id="btnLimpiar">🗑️ Limpiar historial</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content: space-between; cursor:pointer;" id="toggleDebug">
+      <b style="font-size:11px; color:#888;">🔍 Ver texto crudo leído por el OCR</b>
+      <span id="debugArrow" style="color:#666;">▼</span>
+    </div>
+    <pre id="debugTexto" style="display:none; margin-top:8px; font-size:10px; color:#7baee8; white-space:pre-wrap; max-height:150px; overflow-y:auto; background:#0a0a0a; padding:8px; border-radius:6px;"></pre>
+  </div>
+
+  <div class="card">
+    <div class="row" style="justify-content: space-between; margin-bottom: 8px;">
+      <b>Oportunidades detectadas</b>
+      <span id="contador" style="color:#666; font-size: 10.5px;"></span>
+    </div>
+    <div id="lista"><div style="color:#555;">Aún no hay datos. Calibra e inicia el radar.</div></div>
+  </div>
+
+  <div class="card" id="calc-panel">
+    <b>Calcular cobertura</b>
+    <div style="margin-top:8px;" id="seleccionInfo"></div>
+    <label>Monto a apostar (COP)</label>
+    <input type="number" id="montoInput" value="10000" />
+    <button class="primary" id="btnCalcular" style="margin-top:8px; width:100%;">Calcular</button>
+    <div id="resultadoBox"></div>
+  </div>
+
+<script>
+  const statusDot = document.getElementById('statusDot');
+  const statusText = document.getElementById('statusText');
+  const btnCalibrar = document.getElementById('btnCalibrar');
+  const btnIniciar = document.getElementById('btnIniciar');
+  const btnDetener = document.getElementById('btnDetener');
+  const selectMonitor = document.getElementById('selectMonitor');
+  const listaEl = document.getElementById('lista');
+  const contadorEl = document.getElementById('contador');
+  const calcPanel = document.getElementById('calc-panel');
+  const seleccionInfo = document.getElementById('seleccionInfo');
+  const resultadoBox = document.getElementById('resultadoBox');
+
+  let calibrado = false;
+  let radarActivo = false;
+  let ultimaLista = [];
+  let seleccionados = []; // hasta 2 claves
+
+  // --- Monitores ---
+  window.radarAPI.listarMonitores();
+  window.radarAPI.onListaMonitores((displays) => {
+    selectMonitor.innerHTML = displays.map(d =>
+      `<option value="${d.id}">${d.primary ? '🖥️ Principal' : '🖥️ Secundario'} ${d.label}</option>`
+    ).join('');
+  });
+
+  btnCalibrar.addEventListener('click', () => {
+    const displayId = parseInt(selectMonitor.value);
+    window.radarAPI.iniciarCalibracion(displayId);
+  });
+
+  window.radarAPI.onConfigInicial(({ calibrado: c }) => {
+    calibrado = c;
+    actualizarStatus();
+  });
+
+  window.radarAPI.onCalibracionCompleta(() => {
+    calibrado = true;
+    actualizarStatus();
+  });
+
+  function actualizarStatus() {
+    btnIniciar.disabled = !calibrado || radarActivo;
+    statusText.textContent = calibrado
+      ? (radarActivo ? 'Radar activo' : 'Calibrado — listo para iniciar')
+      : 'Sin calibrar';
+    statusDot.className = 'status-dot' + (radarActivo ? ' activo' : '');
+  }
+
+  // --- Iniciar / detener ---
+  btnIniciar.addEventListener('click', () => {
+    window.radarAPI.iniciarRadar();
+    radarActivo = true;
+    btnDetener.disabled = false;
+    actualizarStatus();
+  });
+
+  btnDetener.addEventListener('click', () => {
+    window.radarAPI.detenerRadar();
+    radarActivo = false;
+    btnDetener.disabled = true;
+    actualizarStatus();
+  });
+
+  document.getElementById('btnLimpiar').addEventListener('click', () => {
+    window.radarAPI.limpiarHistorial();
+    seleccionados = [];
+    calcPanel.classList.remove('visible');
+  });
+
+  // --- Panel de texto crudo (para diagnóstico) ---
+  const debugTexto = document.getElementById('debugTexto');
+  const debugArrow = document.getElementById('debugArrow');
+  let debugVisible = false;
+  document.getElementById('toggleDebug').addEventListener('click', () => {
+    debugVisible = !debugVisible;
+    debugTexto.style.display = debugVisible ? 'block' : 'none';
+    debugArrow.textContent = debugVisible ? '▲' : '▼';
+  });
+
+  // --- Cola en vivo ---
+  window.radarAPI.onActualizacionCola(({ items, textoCrudo }) => {
+    ultimaLista = items;
+    renderLista();
+    if (textoCrudo !== undefined) debugTexto.textContent = textoCrudo || '(vacío)';
+  });
+
+  window.radarAPI.onErrorRadar((msg) => {
+    contadorEl.textContent = 'Error: ' + msg;
+  });
+
+  function renderLista() {
+    const enPantalla = ultimaLista.filter(i => i.estado === 'en_pantalla').length;
+    contadorEl.textContent = `${enPantalla} en pantalla · ${ultimaLista.length} total`;
+
+    if (ultimaLista.length === 0) {
+      listaEl.innerHTML = '<div style="color:#555;">Aún no hay datos.</div>';
+      return;
+    }
+
+    listaEl.innerHTML = ultimaLista.map(item => {
+      const sel = seleccionados.includes(item.id) ? ' seleccionado' : '';
+      const soportaVerificacion = /pinnacle|unibet|betplay/i.test(item.casa);
+      const botonVerificar = soportaVerificacion
+        ? `<button class="btn-verificar" data-verificar-id="${item.id}">Verificar ↗</button>`
+        : '';
+      return `
+        <div class="item ${item.estado}${sel}" data-id="${item.id}">
+          <div class="item-info">
+            <span class="item-casa">[${item.casa}]</span> <b>${item.partido}</b><br/>
+            <span style="color:#777;">${item.mercado}</span>
+          </div>
+          <div class="item-right">
+            ${botonVerificar}
+            <div class="item-cuota">${item.cuota}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    document.querySelectorAll('.item').forEach(el => {
+      el.addEventListener('click', (e) => {
+        if (e.target.closest('.btn-verificar')) return; // no seleccionar si se hizo clic en el botón
+        toggleSeleccion(el.dataset.id);
+      });
+    });
+
+    document.querySelectorAll('.btn-verificar').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.verificarId;
+        btn.disabled = true;
+        btn.textContent = 'Buscando...';
+        window.radarAPI.verificarPartido(id);
+      });
+    });
+  }
+
+  function toggleSeleccion(id) {
+    if (seleccionados.includes(id)) {
+      seleccionados = seleccionados.filter(x => x !== id);
+    } else {
+      if (seleccionados.length >= 2) seleccionados.shift(); // solo guarda las últimas 2
+      seleccionados.push(id);
+    }
+    renderLista();
+    actualizarCalcPanel();
+  }
+
+  function actualizarCalcPanel() {
+    if (seleccionados.length === 2) {
+      calcPanel.classList.add('visible');
+      const items = seleccionados.map(id => ultimaLista.find(i => i.id === id));
+      seleccionInfo.innerHTML = items.map(i =>
+        `<div>[${i.casa}] ${i.partido} — ${i.mercado} @ <b>${i.cuota}</b></div>`
+      ).join('');
+      resultadoBox.innerHTML = '';
+    } else {
+      calcPanel.classList.remove('visible');
+    }
+  }
+
+  document.getElementById('btnCalcular').addEventListener('click', () => {
+    const monto = parseFloat(document.getElementById('montoInput').value);
+    if (seleccionados.length !== 2 || isNaN(monto) || monto <= 0) return;
+    window.radarAPI.calcularCobertura({ clave1: seleccionados[0], clave2: seleccionados[1], monto });
+  });
+
+  window.radarAPI.onResultadoCobertura(({ resultado, error }) => {
+    if (error) {
+      resultadoBox.innerHTML = `<div style="color:#ff6b6b;">${error}</div>`;
+      return;
+    }
+    resultadoBox.innerHTML = `
+      <div class="resultado">
+        <div>Pata 1: $${resultado.montoPata1.toLocaleString('es-CO')}</div>
+        <div>Pata 2: $${resultado.montoPata2.toLocaleString('es-CO')}</div>
+        <div style="margin-top:6px;" class="big">Retorno: $${resultado.retornoGarantizado.toLocaleString('es-CO')}</div>
+        <div class="g">Ganancia neta: $${resultado.gananciaNeta.toLocaleString('es-CO')} (${resultado.porcentaje}%)</div>
+      </div>
+    `;
+  });
+
+  window.radarAPI.onResultadoVerificacion(({ clave, url, error, cargando }) => {
+    const btn = document.querySelector(`[data-verificar-id="${clave}"]`);
+    if (!btn) return;
+    if (cargando) return;
+    if (url) {
+      btn.textContent = '✅ Abierto';
+      setTimeout(() => renderLista(), 1500);
+    } else {
+      btn.textContent = '❌ No hallado';
+      btn.disabled = false;
+      setTimeout(() => renderLista(), 2000);
+    }
+  });
+
+  actualizarStatus();
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "safebet-radar-app",
+  "version": "0.1.0",
+  "description": "Radar de cuotas: lee el cantacuotas y prepara los datos para SafeBet",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "node-tesseract-ocr": "^2.2.1",
+    "screenshot-desktop": "^1.15.0",
+    "sharp": "^0.33.0"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7"
+  }
+}
